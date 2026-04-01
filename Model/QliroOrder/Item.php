@@ -45,7 +45,7 @@ class Item implements QliroOrderItemInterface
     /**
      * @var float
      */
-    private float $vatRate = 0.0;
+    private ?float $vatRate = null;
 
     /**
      * @var string
@@ -151,7 +151,7 @@ class Item implements QliroOrderItemInterface
     /**
      * @inheirtDoc
      */
-    public function getVatRate(): float
+    public function getVatRate(): ?float
     {
         return $this->vatRate;
     }
@@ -159,7 +159,7 @@ class Item implements QliroOrderItemInterface
     /**
      * @inheirtDoc
      */
-    public function setVatRate(float $value): static
+    public function setVatRate(?float $value): static
     {
         $this->vatRate = $value;
 

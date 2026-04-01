@@ -8,10 +8,12 @@ namespace Qliro\QliroOne\Model\Management;
 
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Sales\Api\OrderRepositoryInterface;
+use Magento\Sales\Model\Order\Creditmemo;
+use Magento\Sales\Model\Order\Creditmemo\Item as CreditmemoItem;
 use Magento\Sales\Model\Order;
 use Qliro\QliroOne\Api\Client\OrderManagementInterface;
+use Qliro\QliroOne\Api\Data\AdminAddItemsToInvoiceRequestInterface;
 use Qliro\QliroOne\Api\Data\AdminReturnWithItemsRequestInterface;
-use Qliro\QliroOne\Api\Data\AdminReturnWithItemsRequestInterfaceFactory;
 use Qliro\QliroOne\Api\Data\QliroOrderInterface;
 use Qliro\QliroOne\Api\Data\QliroOrderManagementStatusInterface;
 use Qliro\QliroOne\Api\LinkRepositoryInterface;
@@ -23,6 +25,7 @@ use Qliro\QliroOne\Api\Data\OrderManagementStatusInterfaceFactory;
 use Qliro\QliroOne\Api\OrderManagementStatusRepositoryInterface;
 use Qliro\QliroOne\Api\Data\OrderManagementStatusInterface;
 use Qliro\QliroOne\Model\OrderManagementStatus;
+use Qliro\QliroOne\Model\QliroOrder\Admin\Builder\AddItemsToInvoiceBuilder;
 use Qliro\QliroOne\Model\QliroOrder\Admin\Builder\InvoiceMarkItemsAsShippedRequestBuilder;
 use Qliro\QliroOne\Model\QliroOrder\Admin\Builder\ReturnWithItemsBuilder;
 use Qliro\QliroOne\Model\QliroOrder\Admin\Builder\ShipmentMarkItemsAsShippedRequestBuilder;
@@ -88,6 +91,11 @@ class Payment extends AbstractManagement
     private $returnWithItemsBuilder;
 
     /**
+     * @var AddItemsToInvoiceBuilder
+     */
+    private $addItemsToInvoiceBuilder;
+
+    /**
      * Inject dependencies
      *
      * @param Config $qliroConfig
@@ -101,6 +109,7 @@ class Payment extends AbstractManagement
      * @param InvoiceMarkItemsAsShippedRequestBuilder $invoiceMarkItemsAsShippedRequestBuilder
      * @param ShipmentMarkItemsAsShippedRequestBuilder $shipmentMarkItemsAsShippedRequestBuilder
      * @param ReturnWithItemsBuilder $returnWithItemsBuilder
+     * @param AddItemsToInvoiceBuilder $addItemsToInvoiceBuilder
      */
     public function __construct(
         Config $qliroConfig,
@@ -113,7 +122,8 @@ class Payment extends AbstractManagement
         OrderManagementStatusRepositoryInterface $orderManagementStatusRepository,
         InvoiceMarkItemsAsShippedRequestBuilder $invoiceMarkItemsAsShippedRequestBuilder,
         ShipmentMarkItemsAsShippedRequestBuilder $shipmentMarkItemsAsShippedRequestBuilder,
-        ReturnWithItemsBuilder $returnWithItemsBuilder
+        ReturnWithItemsBuilder $returnWithItemsBuilder,
+        AddItemsToInvoiceBuilder $addItemsToInvoiceBuilder
     ) {
         $this->qliroConfig = $qliroConfig;
         $this->orderManagementApi = $orderManagementApi;
@@ -126,6 +136,7 @@ class Payment extends AbstractManagement
         $this->invoiceMarkItemsAsShippedRequestBuilder = $invoiceMarkItemsAsShippedRequestBuilder;
         $this->shipmentMarkItemsAsShippedRequestBuilder = $shipmentMarkItemsAsShippedRequestBuilder;
         $this->returnWithItemsBuilder = $returnWithItemsBuilder;
+        $this->addItemsToInvoiceBuilder = $addItemsToInvoiceBuilder;
     }
 
     /**
@@ -321,16 +332,27 @@ class Payment extends AbstractManagement
         try {
             $link = $this->linkRepository->getByOrderId($payment->getOrder()->getId());
 
-            $request = $this->returnWithItemsBuilder
-                ->setPayment($payment)
-                ->create();
+            if ($this->hasRefundedOrderItems($payment->getCreditmemo())) {
+                $request = $this->returnWithItemsBuilder
+                    ->setPayment($payment)
+                    ->create();
 
-            if (!$this->isValidRequestAmount($request, $amount)) {
-                throw new LocalizedException(__('Request amount is not valid.'));
+                if (!$this->isValidReturnRequestAmount($request, $amount)) {
+                    throw new LocalizedException(__('Request amount is not valid.'));
+                }
+
+                $result = $this->orderManagementApi->returnWithItems($request, $payment->getOrder()->getStoreId());
+            } else {
+                $request = $this->addItemsToInvoiceBuilder
+                    ->setPayment($payment)
+                    ->create();
+
+                if (!$this->isValidAdditionsRequestAmount($request, $amount)) {
+                    throw new LocalizedException(__('Request amount is not valid.'));
+                }
+
+                $result = $this->orderManagementApi->addItemsToInvoice($request, $payment->getOrder()->getStoreId());
             }
-
-
-            $result = $this->orderManagementApi->returnWithItems($request, $payment->getOrder()->getStoreId());
 
             try {
                 /** @var OrderManagementStatus $omStatus */
@@ -385,19 +407,42 @@ class Payment extends AbstractManagement
      * @param $amount
      * @return bool
      */
-    private function isValidRequestAmount(AdminReturnWithItemsRequestInterface $request, $amount)
+    private function isValidReturnRequestAmount(AdminReturnWithItemsRequestInterface $request, $amount)
+    {
+        return $this->isValidPayloadAmount($request->getReturns(), $amount);
+    }
+
+    /**
+     * @param AdminAddItemsToInvoiceRequestInterface $request
+     * @param $amount
+     * @return bool
+     */
+    private function isValidAdditionsRequestAmount(AdminAddItemsToInvoiceRequestInterface $request, $amount)
+    {
+        $additions = $request->getAdditions();
+        if (!count($additions) || !isset($additions[0]['OrderItems'])) {
+            return false;
+        }
+
+        return $this->isValidPayloadAmount(['OrderItems' => $additions[0]['OrderItems']], $amount);
+    }
+
+    /**
+     * @param array $payload
+     * @param float|int|string $amount
+     * @return bool
+     */
+    private function isValidPayloadAmount(array $payload, $amount)
     {
         $amount = floatval($amount);
-
-        $returns = $request->getReturns();
-        if (!count($returns)) {
+        if (!count($payload)) {
             return false;
         }
 
         $sum = 0;
-        foreach ($returns as $type => $return) {
+        foreach ($payload as $type => $return) {
             if (is_array($return) && isset($return['PricePerItemIncVat'])) {
-                $sum += $return['PricePerItemIncVat'] * $return['Quantity'];
+                $sum += $this->normalizeItemAmount($return, $type);
                 continue;
             }
 
@@ -407,17 +452,7 @@ class Payment extends AbstractManagement
 
             foreach ($return as $inner) {
                 if (is_array($inner) && isset($inner['PricePerItemIncVat'])) {
-                    $innerSum = $inner['PricePerItemIncVat'] * $inner['Quantity'];
-                    switch ($type) {
-                        case 'Fees':
-                            $innerSum = -abs($innerSum);
-                            break;
-                        default:
-                            $innerSum = abs($innerSum);
-                            break;
-                    }
-
-                    $sum += $innerSum;
+                    $sum += $this->normalizeItemAmount($inner, $type);
                 }
             }
         }
@@ -427,5 +462,40 @@ class Payment extends AbstractManagement
         }
 
         return true;
+    }
+
+    /**
+     * @param array $item
+     * @param string $type
+     * @return float
+     */
+    private function normalizeItemAmount(array $item, string $type): float
+    {
+        $sum = ((float)$item['PricePerItemIncVat']) * ((float)$item['Quantity']);
+
+        if ($type === 'Fees' || (($item['Type'] ?? null) === 'Fee')) {
+            return -abs($sum);
+        }
+
+        return abs($sum);
+    }
+
+    private function hasRefundedOrderItems(Creditmemo $creditMemo): bool
+    {
+        /** @var CreditmemoItem $item */
+        foreach ($creditMemo->getItems() as $item) {
+            if ((float)$item->getQty() <= 0) {
+                continue;
+            }
+
+            $orderItem = $item->getOrderItem();
+            if ($orderItem && $orderItem->isDummy()) {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 }

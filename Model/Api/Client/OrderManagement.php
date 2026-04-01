@@ -8,6 +8,7 @@ namespace Qliro\QliroOne\Model\Api\Client;
 
 use GuzzleHttp\Exception\RequestException;
 use Magento\Framework\Serialize\Serializer\Json;
+use Qliro\QliroOne\Api\Data\AdminAddItemsToInvoiceRequestInterface;
 use Qliro\QliroOne\Api\Data\AdminCancelOrderRequestInterface;
 use Qliro\QliroOne\Api\Data\AdminCreateMerchantPaymentResponseInterface;
 use Qliro\QliroOne\Api\Data\AdminMarkItemsAsShippedRequestInterface;
@@ -269,6 +270,40 @@ class OrderManagement implements \Qliro\QliroOne\Api\Client\OrderManagementInter
 
             /** @var \Qliro\QliroOne\Api\Data\AdminTransactionResponseInterface $container */
             $container = $this->containerMapper->fromArray( $paymentTransactions[0] ?? [], AdminTransactionResponseInterface::class);
+        } catch (\Exception $exception) {
+            $this->handleExceptions($exception);
+        }
+
+        return $container;
+    }
+
+    /**
+     * Make a call "Add items to invoice"
+     *
+     * @param AdminAddItemsToInvoiceRequestInterface $request
+     * @param int|null $storeId
+     * @return AdminTransactionResponseInterface|null
+     * @throws ClientException
+     */
+    public function addItemsToInvoice(AdminAddItemsToInvoiceRequestInterface $request, $storeId = null)
+    {
+        $container = null;
+        $request->setRequestId($this->idGenerator->generateId());
+
+        try {
+            $payload = [
+                'RequestId' => $request->getRequestId(),
+                'MerchantApiKey' => $request->getMerchantApiKey(),
+                'Currency' => $request->getCurrency(),
+                'OrderId' => $request->getOrderId(),
+                'Additions' => $request->getAdditions(),
+            ];
+
+            $response = $this->service->post('checkout/adminapi/v2/AddItemsToInvoice', $payload, $storeId);
+            $paymentTransactions = $response['PaymentTransactions'] ?? [];
+
+            /** @var \Qliro\QliroOne\Api\Data\AdminTransactionResponseInterface $container */
+            $container = $this->containerMapper->fromArray($paymentTransactions[0] ?? [], AdminTransactionResponseInterface::class);
         } catch (\Exception $exception) {
             $this->handleExceptions($exception);
         }

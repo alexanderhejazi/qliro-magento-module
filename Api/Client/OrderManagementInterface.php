@@ -6,6 +6,7 @@
 
 namespace Qliro\QliroOne\Api\Client;
 
+use Qliro\QliroOne\Api\Data\AdminAddItemsToInvoiceRequestInterface;
 use Qliro\QliroOne\Api\Data\AdminCancelOrderRequestInterface;
 use Qliro\QliroOne\Api\Data\AdminMarkItemsAsShippedRequestInterface;
 use Qliro\QliroOne\Api\Data\AdminReturnWithItemsRequestInterface;
@@ -66,6 +67,16 @@ interface OrderManagementInterface
      * @throws \Qliro\QliroOne\Model\Api\Client\Exception\ClientException
      */
     public function returnWithItems(AdminReturnWithItemsRequestInterface $request, $storeId = null);
+
+    /**
+     * Make a call "Add items to invoice"
+     *
+     * @param \Qliro\QliroOne\Api\Data\AdminAddItemsToInvoiceRequestInterface $request
+     * @param int|null $storeId
+     * @return \Qliro\QliroOne\Api\Data\AdminTransactionResponseInterface
+     * @throws \Qliro\QliroOne\Model\Api\Client\Exception\ClientException
+     */
+    public function addItemsToInvoice(AdminAddItemsToInvoiceRequestInterface $request, $storeId = null);
 
     /**
      * Get admin QliroOne order payment transaction

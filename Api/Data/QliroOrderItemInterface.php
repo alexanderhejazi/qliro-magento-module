@@ -62,7 +62,7 @@ interface QliroOrderItemInterface extends ContainerInterface
     /**
      * @return float
      */
-    public function getVatRate(): float;
+    public function getVatRate(): ?float;
 
     /**
      * @return string
@@ -111,7 +111,7 @@ interface QliroOrderItemInterface extends ContainerInterface
      * @param float $value
      * @return $this
      */
-    public function setVatRate(float $value): static;
+    public function setVatRate(?float $value): static;
 
     /**
      * @param string $value

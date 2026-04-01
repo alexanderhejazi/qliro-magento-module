@@ -206,6 +206,7 @@
     <preference for="Qliro\QliroOne\Api\Data\AdminUpdateItemsRequestInterface" type="Qliro\QliroOne\Model\QliroOrder\Admin\UpdateItemsRequest" />
     <preference for="Qliro\QliroOne\Api\Data\AdminOrderPaymentTransactionInterface" type="Qliro\QliroOne\Model\QliroOrder\Admin\OrderPaymentTransaction" />
     <preference for="Qliro\QliroOne\Api\Data\AdminReturnWithItemsRequestInterface" type="Qliro\QliroOne\Model\QliroOrder\Admin\ReturnWithItemsRequest" />
+    <preference for="Qliro\QliroOne\Api\Data\AdminAddItemsToInvoiceRequestInterface" type="Qliro\QliroOne\Model\QliroOrder\Admin\AddItemsToInvoiceRequest" />
     <preference for="Qliro\QliroOne\Api\Data\AdminCreateMerchantPaymentRequestInterface" type="Qliro\QliroOne\Model\MerchantPayment\CreateRequest" />
     <preference for="Qliro\QliroOne\Api\Data\AdminTransactionResponseInterface" type="Qliro\QliroOne\Model\QliroOrder\Admin\TransactionResponse" />
     <preference for="Qliro\QliroOne\Api\Data\AdminCreateMerchantPaymentResponseInterface" type="Qliro\QliroOne\Model\MerchantPayment\CreateResponse" />
