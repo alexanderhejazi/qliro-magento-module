@@ -10,6 +10,7 @@ use Magento\Framework\Event\ManagerInterface;
 use Magento\Sales\Api\Data\CreditmemoInterface;
 use Qliro\QliroOne\Api\Data\QliroOrderItemInterface;
 use Qliro\QliroOne\Api\Data\QliroOrderItemInterfaceFactory;
+use Qliro\QliroOne\Helper\Data as QliroHelper;
 
 class RefundFeeBuilder
 {
@@ -24,6 +25,16 @@ class RefundFeeBuilder
     private $eventManager;
 
     /**
+     * @var SharedVatRateResolver
+     */
+    private $sharedVatRateResolver;
+
+    /**
+     * @var QliroHelper
+     */
+    private $qliroHelper;
+
+    /**
      * @var CreditmemoInterface
      */
     private $creditMemo;
@@ -33,13 +44,19 @@ class RefundFeeBuilder
      *
      * @param QliroOrderItemInterfaceFactory $qliroOrderItemFactory
      * @param ManagerInterface $eventManager
+     * @param SharedVatRateResolver $sharedVatRateResolver
+     * @param QliroHelper $qliroHelper
      */
     public function __construct(
         QliroOrderItemInterfaceFactory $qliroOrderItemFactory,
-        ManagerInterface $eventManager
+        ManagerInterface $eventManager,
+        SharedVatRateResolver $sharedVatRateResolver,
+        QliroHelper $qliroHelper
     ) {
         $this->qliroOrderItemFactory = $qliroOrderItemFactory;
         $this->eventManager = $eventManager;
+        $this->sharedVatRateResolver = $sharedVatRateResolver;
+        $this->qliroHelper = $qliroHelper;
     }
 
     /**
@@ -82,15 +99,25 @@ class RefundFeeBuilder
     {
         $container = $this->qliroOrderItemFactory->create();
         if ($this->creditMemo->getAdjustmentNegative() > 0) {
+            $priceIncVat = abs((float)$this->creditMemo->getAdjustmentNegative());
+
             /** @var QliroOrderItemInterface $container */
             $container->setMerchantReference(
                 sprintf("ReturnFee_%s", $this->creditMemo->getOrder()->getCreditmemosCollection()->getSize())
             );
             $container->setDescription('Adjustment Fee');
-            $container->setPricePerItemIncVat(abs($this->creditMemo->getAdjustmentNegative()));
-            $container->setPricePerItemExVat(abs($this->creditMemo->getAdjustmentNegative()));
+            $container->setPricePerItemIncVat($priceIncVat);
+            $container->setPricePerItemExVat($priceIncVat);
             $container->setQuantity(1);
             $container->setType(QliroOrderItemInterface::TYPE_FEE);
+
+            $sharedVatRate = $this->sharedVatRateResolver->resolveForOrder($this->creditMemo->getOrder());
+            if ($sharedVatRate !== null) {
+                $priceExVat = $priceIncVat / (1 + ($sharedVatRate / 100));
+
+                $container->setPricePerItemExVat((float)$this->qliroHelper->formatPrice($priceExVat));
+                $container->setVatRate((float)$this->qliroHelper->formatPrice($sharedVatRate * 100));
+            }
 
             $this->eventManager->dispatch(
                 'qliroone_refund_fee_build_after',
