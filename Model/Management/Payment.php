@@ -9,7 +9,6 @@ namespace Qliro\QliroOne\Model\Management;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Model\Order\Creditmemo;
-use Magento\Sales\Model\Order\Creditmemo\Item as CreditmemoItem;
 use Magento\Sales\Model\Order;
 use Qliro\QliroOne\Api\Client\OrderManagementInterface;
 use Qliro\QliroOne\Api\Data\AdminAddItemsToInvoiceRequestInterface;
@@ -482,14 +481,8 @@ class Payment extends AbstractManagement
 
     private function hasRefundedOrderItems(Creditmemo $creditMemo): bool
     {
-        /** @var CreditmemoItem $item */
         foreach ($creditMemo->getItems() as $item) {
             if ((float)$item->getQty() <= 0) {
-                continue;
-            }
-
-            $orderItem = $item->getOrderItem();
-            if ($orderItem && $orderItem->isDummy()) {
                 continue;
             }
 
